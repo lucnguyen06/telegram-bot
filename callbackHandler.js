@@ -19,6 +19,29 @@ class CallbackHandler {
   }
 
   setupCallbacks() {
+    // Start registration - NEW FLOW: All info at once
+    this.bot.action('start_registration', async (ctx) => {
+      await ctx.answerCbQuery();
+      await ctx.reply(
+        `🚀 *ĐĂNG KÝ ROM HYPEROS*\n\n` +
+        `Vui lòng gửi thông tin đăng ký theo format:\n\n` +
+        `📧 Email\n` +
+        `📱 Codename\n` +
+        `🔢 Serial\n` +
+        `💳 Mã giao dịch/Lời nhắn CK\n\n` +
+        `*Ví dụ:*\n` +
+        `\`\`\`\n` +
+        `lucnguyen0562@gmail.com\n` +
+        `houji\n` +
+        `ABC123456789\n` +
+        `MGD123456\n` +
+        `\`\`\`\n\n` +
+        `💡 *Lưu ý:* Mỗi thông tin một dòng, không thêm khoảng trống thừa.`,
+        { parse_mode: 'Markdown' }
+      );
+      this.billHandler.setUserState(ctx.from.id, 'awaiting_all_info');
+    });
+
     // Confirm send bill
     this.bot.action('confirm_send_bill', async (ctx) => {
       await ctx.answerCbQuery('✅ Đã xác nhận');
