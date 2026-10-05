@@ -193,18 +193,28 @@ bot.command('stats', async (ctx) => {
  * ========================================
  */
 
-// Start registration flow (new flow: get info first, then show QR)
+// Start registration flow (new flow: collect all info at once, then show QR)
 bot.action('start_registration', async (ctx) => {
   await ctx.answerCbQuery();
   await ctx.reply(
-    `🚀 *BẮT ĐẦU ĐĂNG KÝ ROM*\n\n` +
-    `Hãy điền đầy đủ thông tin để nhận QR thanh toán.\n\n` +
-    `📧 *Bước 1/3:* Nhập email liên hệ của bạn:\n\n` +
-    `Ví dụ: \`example@gmail.com\``,
+    `🚀 *ĐĂNG KÝ ROM HYPEROS*\n\n` +
+    `Vui lòng gửi thông tin đăng ký theo format:\n\n` +
+    `📧 Email\n` +
+    `📱 Codename\n` +
+    `🔢 Serial\n` +
+    `💳 Mã giao dịch/Lời nhắn CK\n\n` +
+    `*Ví dụ:*\n` +
+    `\`\`\`\n` +
+    `lucnguyen0562@gmail.com\n` +
+    `houji\n` +
+    `ABC123456789\n` +
+    `MGD123456\n` +
+    `\`\`\`\n\n` +
+    `💡 *Lưu ý:* Mỗi thông tin một dòng, không thêm khoảng trống thừa.`,
     { parse_mode: 'Markdown' }
   );
   
-  billHandler.setUserState(ctx.from.id, 'awaiting_email_for_qr');
+  billHandler.setUserState(ctx.from.id, 'awaiting_all_info');
 });
 
 bot.action('send_bill', async (ctx) => {
@@ -218,6 +228,36 @@ bot.action('send_bill', async (ctx) => {
   );
   
   billHandler.setUserState(ctx.from.id, 'awaiting_bill');
+});
+
+bot.action('send_bill_with_info', async (ctx) => {
+  await ctx.answerCbQuery();
+  const userId = ctx.from.id;
+  const tempBill = billHandler.tempBills.get(userId);
+  
+  if (!tempBill || !tempBill.email || !tempBill.deviceCode || !tempBill.serial) {
+    await ctx.reply(
+      '❌ Thông tin đăng ký đã hết hạn. Vui lòng đăng ký lại.',
+      Markup.inlineKeyboard([
+        [Markup.button.callback('🔄 Đăng Ký Lại', 'start_registration')]
+      ])
+    );
+    return;
+  }
+  
+  await ctx.reply(
+    `📤 *Gửi Bill Thanh Toán*\n\n` +
+    `📧 Email: \`${tempBill.email}\`\n` +
+    `📱 Device: \`${tempBill.deviceCode}\`\n` +
+    `🔢 Serial: \`${tempBill.serial}\`\n` +
+    `💳 Mã GD: \`${tempBill.transaction}\`\n\n` +
+    `Vui lòng gửi ảnh bill thanh toán của bạn.\n\n` +
+    `✅ Chấp nhận: JPG, PNG\n` +
+    `📌 Lưu ý: Ảnh phải rõ ràng, đầy đủ thông tin giao dịch`,
+    { parse_mode: 'Markdown' }
+  );
+  
+  billHandler.setUserState(ctx.from.id, 'awaiting_bill_with_info');
 });
 
 bot.action('check_status', async (ctx) => {
@@ -307,7 +347,9 @@ bot.on('text', async (ctx) => {
   const userId = ctx.from.id;
   const state = billHandler.getUserState(userId);
   
-  if (state === 'awaiting_email' || state === 'awaiting_email_for_qr') {
+  if (state === 'awaiting_all_info') {
+    await billHandler.handleAllInfoInput(ctx);
+  } else if (state === 'awaiting_email' || state === 'awaiting_email_for_qr') {
     await billHandler.handleEmailInput(ctx);
   } else if (state === 'awaiting_device' || state === 'awaiting_device_for_qr') {
     await billHandler.handleDeviceInput(ctx);
