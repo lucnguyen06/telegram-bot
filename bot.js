@@ -62,38 +62,25 @@ if (config.features.cronJobs) {
  * ========================================
  */
 
-// /start - Chào mừng user
+// /start - Bắt đầu đăng ký ROM
 bot.command('start', async (ctx) => {
   const firstName = ctx.from.first_name || 'bạn';
+  const userId = ctx.from.id;
   
-  await ctx.replyWithPhoto(
-    { url: 'https://vietqr.app/img?bank=MBBank&acc=0562903904&template=&showinfo=true&holder=NGUYEN%20TAN%20LUC&store=HyperUR%20Rom' },
+  await ctx.reply(
+    `🚀 *Chào mừng ${firstName} đến với HyperUR Bot!*\n\n` +
+    `Bot hỗ trợ đăng ký ROM HyperOS cho thiết bị Xiaomi/Redmi.\n\n` +
+    `📋 *Quy trình đăng ký:*\n` +
+    `1️⃣ Điền thông tin thiết bị\n` +
+    `2️⃣ Nhận QR code thanh toán\n` +
+    `3️⃣ Quét QR và thanh toán\n` +
+    `4️⃣ Gửi bill cho bot\n` +
+    `5️⃣ Nhận ROM sau khi được duyệt\n\n` +
+    `💡 Bấm nút bên dưới để bắt đầu!`,
     {
-      caption: `🚀 *Chào mừng ${firstName} đến với HyperUR Bot!*\n\n` +
-        `Bot hỗ trợ đăng ký và quản lý ROM HyperOS cho thiết bị Xiaomi/Redmi.\n\n` +
-        `📋 *Các chức năng chính:*\n` +
-        `• Gửi bill thanh toán để đăng ký ROM\n\n` +
-        `💳 *Thông tin thanh toán:*\n` +
-        `🏦 Ngân hàng: MB Bank (Quân Đội)\n` +
-        `👤 Chủ TK: NGUYEN TAN LUC\n` +
-        `💳 STK: 0562903904\n` +
-        `🏪 Nội dung: HyperUR Rom\n\n` +
-        `💡 *Hướng dẫn sử dụng:*\n` +
-        `1️⃣ Quét mã QR trên để thanh toán\n` +
-        `2️⃣ Chụp màn hình bill giao dịch\n` +
-        `3️⃣ Gửi ảnh bill cho bot\n` +
-        `4️⃣ Điền đầy đủ thông tin:\n` +
-        `   • Email liên hệ\n` +
-        `   • Mã thiết bị (codename)\n` +
-        `   • Số serial thiết bị\n` +
-        `   • Mã giao dịch / Lời nhắn CK\n` +
-        `5️⃣ Chờ admin duyệt (thường < 24h)\n` +
-        `6️⃣ Nhận link ROM qua bot\n\n` +
-        `🌐 Website: ${process.env.HYPERUR_WEBSITE_URL || 'hyperur.com'}\n` +
-        `📢 Channel: @hypermodupdate`,
       parse_mode: 'Markdown',
       ...Markup.inlineKeyboard([
-        [Markup.button.callback('💳 Xem QR Thanh Toán', 'show_payment_qr')],
+        [Markup.button.callback('🚀 Bắt Đầu Đăng Ký', 'start_registration')],
         [Markup.button.callback('📤 Gửi Bill', 'send_bill')],
         [Markup.button.callback('🔍 Tra Cứu Đơn', 'check_status')],
         [Markup.button.url('🌐 Website HyperUR', process.env.HYPERUR_WEBSITE_URL || 'https://t.me/hypermodupdate')]
@@ -206,6 +193,20 @@ bot.command('stats', async (ctx) => {
  * ========================================
  */
 
+// Start registration flow (new flow: get info first, then show QR)
+bot.action('start_registration', async (ctx) => {
+  await ctx.answerCbQuery();
+  await ctx.reply(
+    `🚀 *BẮT ĐẦU ĐĂNG KÝ ROM*\n\n` +
+    `Hãy điền đầy đủ thông tin để nhận QR thanh toán.\n\n` +
+    `📧 *Bước 1/3:* Nhập email liên hệ của bạn:\n\n` +
+    `Ví dụ: \`example@gmail.com\``,
+    { parse_mode: 'Markdown' }
+  );
+  
+  billHandler.setUserState(ctx.from.id, 'awaiting_email_for_qr');
+});
+
 bot.action('send_bill', async (ctx) => {
   await ctx.answerCbQuery();
   await ctx.reply(
@@ -240,6 +241,30 @@ bot.action('show_payment_qr', async (ctx) => {
       ])
     }
   );
+});
+
+// Confirm bill callback
+bot.action('confirm_send_bill', async (ctx) => {
+  await ctx.answerCbQuery();
+  await billHandler.processBillPhoto(ctx);
+});
+
+bot.action('cancel_send_bill', async (ctx) => {
+  await ctx.answerCbQuery('Đã hủy');
+  await ctx.reply('❌ Đã hủy gửi bill.');
+  billHandler.clearUserState(ctx.from.id);
+});
+
+// Submit bill final callback
+bot.action('submit_bill_final', async (ctx) => {
+  await ctx.answerCbQuery();
+  await billHandler.submitBill(ctx);
+});
+
+bot.action('cancel_submit', async (ctx) => {
+  await ctx.answerCbQuery('Đã hủy');
+  await ctx.reply('❌ Đã hủy gửi đơn.');
+  billHandler.clearUserState(ctx.from.id);
 });
 
 // Admin approve/reject callbacks
@@ -282,11 +307,11 @@ bot.on('text', async (ctx) => {
   const userId = ctx.from.id;
   const state = billHandler.getUserState(userId);
   
-  if (state === 'awaiting_email') {
+  if (state === 'awaiting_email' || state === 'awaiting_email_for_qr') {
     await billHandler.handleEmailInput(ctx);
-  } else if (state === 'awaiting_device') {
+  } else if (state === 'awaiting_device' || state === 'awaiting_device_for_qr') {
     await billHandler.handleDeviceInput(ctx);
-  } else if (state === 'awaiting_serial') {
+  } else if (state === 'awaiting_serial' || state === 'awaiting_serial_for_qr') {
     await billHandler.handleSerialInput(ctx);
   } else if (state === 'awaiting_transaction') {
     await billHandler.handleTransactionInput(ctx);
