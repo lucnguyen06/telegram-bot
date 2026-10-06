@@ -17,7 +17,7 @@ const normalize = (str) => str.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
 
 // Hàm gọi API thêm serial
 async function callApiAddSerial(serial, isTrial) {
-  const apiUrl = 'https://hypermods.id.vn/check_serial2.php?serial=43890701';
+  const apiUrl = 'https://hypermods.id.vn/check_serial2.php';
 
   let expireDate = '';
   if (isTrial) {
@@ -171,8 +171,165 @@ const registerWizard = new Scenes.WizardScene(
   }
 );
 
+// Tạo Wizard Scene cho đăng ký số lượng
+const registerBulkWizard = new Scenes.WizardScene(
+  'REGISTER_BULK_SCENE',
+  (ctx) => {
+    ctx.reply('Email liên hệ của bạn?');
+    return ctx.wizard.next();
+  },
+  (ctx) => {
+    if (!ctx.message || !ctx.message.text) return;
+    ctx.wizard.state.email = ctx.message.text;
+    ctx.reply(
+      'Nhập danh sách mã thiết bị (codename) và số serial của bạn. (Tối đa 10 thiết bị)\n\n' +
+      '*Lưu ý khi đăng ký số lượng:*\n' +
+      'Vui lòng nhập mỗi thiết bị trên một dòng theo định dạng: `Codename - Serial`\n\n' +
+      'Ví dụ:\n' +
+      '`Phone1 - 123456789`\n' +
+      '`Phone2 - 987654321`',
+      { parse_mode: 'Markdown' }
+    );
+    return ctx.wizard.next();
+  },
+  (ctx) => {
+    if (!ctx.message || !ctx.message.text) return;
+    const text = ctx.message.text;
+    const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+    
+    if (lines.length < 2) {
+      ctx.reply('Bạn cần nhập ít nhất 2 thiết bị cho đăng ký số lượng. Vui lòng nhập lại danh sách hoặc dùng lệnh /start để quay lại.');
+      return; 
+    }
+    
+    if (lines.length > 10) {
+      ctx.reply('Bạn chỉ được nhập tối đa 10 thiết bị. Vui lòng nhập lại.');
+      return;
+    }
+
+    const devices = [];
+    for (const line of lines) {
+      const parts = line.split(/[-|,]/);
+      if (parts.length < 2) {
+        ctx.reply(`Dòng "${line}" không đúng định dạng. Vui lòng nhập lại toàn bộ danh sách theo định dạng: Codename - Serial`);
+        return;
+      }
+      
+      const codename = parts[0].trim();
+      const serial = parts.slice(1).join('-').trim(); // reconnect if serial has -
+      if (!codename || !serial) {
+          ctx.reply(`Dòng "${line}" không hợp lệ. Vui lòng nhập lại toàn bộ danh sách.`);
+          return;
+      }
+      devices.push({ codename, serial });
+    }
+
+    ctx.wizard.state.devices = devices;
+
+    ctx.reply('Bạn muốn đăng ký số lượng cho gói nào?', Markup.inlineKeyboard([
+      [Markup.button.callback('Dùng thử 36 ngày ⏳', 'bulk_trial')],
+      [Markup.button.callback('Vĩnh viễn ♾️', 'bulk_permanent')]
+    ]));
+    return ctx.wizard.next();
+  },
+  async (ctx) => {
+    if (!ctx.callbackQuery) return;
+    await ctx.answerCbQuery().catch(console.error);
+    const data = ctx.callbackQuery.data;
+    const isTrial = data === 'bulk_trial';
+    
+    const email = ctx.wizard.state.email;
+    const devices = ctx.wizard.state.devices;
+    const typeText = isTrial ? 'Dùng thử 36 ngày (Số lượng)' : 'Vĩnh viễn (Số lượng)';
+    
+    const firstSerial = devices[0].serial;
+    const paymentContent = `UR BULK ${firstSerial.substring(0, 5)} ${devices.length}`;
+
+    ctx.scene.leave();
+
+    const adminGroupId = '-1004429951125';
+    const dateStr = new Date().toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
+
+    let deviceListStr = devices.map((d, i) => `${i+1}. ${d.codename} - ${d.serial}`).join('\n');
+
+    if (isTrial) {
+      const notificationToAdmin = `📝 **Có người đăng ký mới (${typeText})!**\n` +
+        `- Người dùng: ${ctx.from.first_name} (@${ctx.from.username || 'không có'})\n` +
+        `- Email: ${email}\n` +
+        `- Số lượng: ${devices.length} thiết bị\n` +
+        `- Danh sách:\n${deviceListStr}\n` +
+        `- Ngày đăng ký: ${dateStr}\n\n` +
+        `✅ **ĐANG TỰ ĐỘNG KÍCH HOẠT API...**`;
+      ctx.telegram.sendMessage(adminGroupId, notificationToAdmin, { parse_mode: 'Markdown' }).catch(err => console.error(err));
+
+      const trialInfo = `✅ **Đăng ký Serial HyperUR thành công!**\n\n` +
+        `📋 **Thông tin của bạn:**\n` +
+        `- Gói đăng ký: ${typeText}\n` +
+        `- Email: ${email}\n` +
+        `- Số lượng: ${devices.length} thiết bị\n\n` +
+        `⏳ Hệ thống đang kích hoạt trên Server, vui lòng chờ trong giây lát...`;
+      ctx.reply(trialInfo, { parse_mode: 'Markdown' });
+
+      let successCount = 0;
+      let failCount = 0;
+
+      for (const d of devices) {
+        const success = await callApiAddSerial(d.serial, true);
+        if (success) successCount++;
+        else failCount++;
+      }
+
+      ctx.reply(`🎉 **Hoàn tất!** Đã xử lý ${devices.length} thiết bị.\nThành công: ${successCount}\nThất bại: ${failCount}`, { parse_mode: 'Markdown' });
+      ctx.telegram.sendMessage(adminGroupId, `✅ API Kích hoạt hoàn tất cho đơn Bulk của ${email}.\nThành công: ${successCount}, Thất bại: ${failCount}.`);
+    } else {
+      devices.forEach(d => {
+        pendingRegistrations.push({
+          isTrial: false,
+          userId: ctx.from.id,
+          username: ctx.from.username,
+          firstName: ctx.from.first_name,
+          email,
+          codename: d.codename,
+          serial: d.serial,
+          paymentContent: normalize(paymentContent),
+          dateStr
+        });
+      });
+      savePending();
+
+      const notificationToAdmin = `📝 **Có người đăng ký mới (${typeText})!**\n` +
+        `- Người dùng: ${ctx.from.first_name} (@${ctx.from.username || 'không có'})\n` +
+        `- Email: ${email}\n` +
+        `- Số lượng: ${devices.length} thiết bị\n` +
+        `- Danh sách:\n${deviceListStr}\n` +
+        `- Ngày đăng ký: ${dateStr}\n` +
+        `- Nội dung CK: \`${paymentContent}\``;
+      ctx.telegram.sendMessage(adminGroupId, notificationToAdmin, { parse_mode: 'Markdown' }).catch(err => console.error(err));
+
+      const paymentInfo = `✅ **Đăng ký Serial HyperUR thành công!**\n\n` +
+        `📋 **Thông tin của bạn:**\n` +
+        `- Gói đăng ký: ${typeText}\n` +
+        `- Email: ${email}\n` +
+        `- Số lượng: ${devices.length} thiết bị\n` +
+        `- Ngày đăng ký: ${dateStr}\n\n` +
+        `Để hoàn tất, vui lòng quét mã QR hoặc chuyển khoản theo thông tin bên dưới:\n\n` +
+        `🏦 *Ngân hàng:* MBBank\n` +
+        `💳 *Số tài khoản:* VQRQAMNWP9901\n` +
+        `👤 *Chủ tài khoản:* NGUYEN TAN LUC\n` +
+        `📝 *Nội dung ủng hộ gợi ý:* \`${paymentContent}\`\n\n` +
+        `⏳ *Hệ thống sẽ tự động đối chiếu khi bạn thanh toán xong, KHÔNG CẦN gửi ảnh bill.* (Trừ khi sau 5-10 phút chưa thấy thông báo thì bạn có thể gửi ảnh bill vào đây để admin kiểm tra thủ công).`;
+
+      const dynamicQrUrl = `https://img.vietqr.io/image/MB-VQRQAMNWP9901-qr_only.png?addInfo=${encodeURIComponent(paymentContent)}&accountName=NGUYEN%20TAN%20LUC`;
+      ctx.replyWithPhoto({ url: dynamicQrUrl }, { caption: paymentInfo, parse_mode: 'Markdown' }).catch(err => {
+        console.error("Error sending photo:", err);
+        ctx.reply(paymentInfo, { parse_mode: 'Markdown' });
+      });
+    }
+  }
+);
+
 // Khởi tạo Stage chứa scene vừa tạo
-const stage = new Scenes.Stage([registerWizard]);
+const stage = new Scenes.Stage([registerWizard, registerBulkWizard]);
 
 // Đăng ký middleware session và stage cho bot
 bot.use(session());
@@ -182,14 +339,21 @@ bot.use(stage.middleware());
 bot.start((ctx) => {
   const firstName = ctx.from.first_name || 'bạn';
 
-  const welcomeMessage = `Chào mừng ${firstName} đến với bot đăng ký HyperUR rom! 🚀\n\nVui lòng nhấn nút bên dưới để tiến hành đăng ký.`;
+  const welcomeMessage = `Chào mừng ${firstName} đến với bot đăng ký HyperUR rom! 🚀\n\n` +
+    `*Lưu ý:*\n` +
+    `- Đăng ký dùng thử: Đăng ký 1 thiết bị\n` +
+    `- Đăng ký vĩnh viễn: Đăng ký 1 thiết bị\n` +
+    `- Đăng ký số lượng: Đăng ký từ 2 đến 10 thiết bị cùng lúc\n\n` +
+    `Vui lòng nhấn nút bên dưới để tiến hành đăng ký.`;
 
   return ctx.reply(
     welcomeMessage,
     Markup.inlineKeyboard([
       [Markup.button.callback('Đăng ký dùng thử 36 ngày ⏳', 'register_trial')],
-      [Markup.button.callback('Đăng ký vĩnh viễn ♾️', 'register_permanent')]
-    ])
+      [Markup.button.callback('Đăng ký vĩnh viễn ♾️', 'register_permanent')],
+      [Markup.button.callback('Đăng ký số lượng 📦', 'register_bulk')]
+    ]),
+    { parse_mode: 'Markdown' }
   );
 });
 
@@ -201,6 +365,11 @@ bot.action('register_trial', async (ctx) => {
 bot.action('register_permanent', async (ctx) => {
   await ctx.answerCbQuery().catch(console.error);
   await ctx.scene.enter('REGISTER_SCENE', { isTrial: false });
+});
+
+bot.action('register_bulk', async (ctx) => {
+  await ctx.answerCbQuery().catch(console.error);
+  await ctx.scene.enter('REGISTER_BULK_SCENE');
 });
 
 // Đã xóa phần approve_trial_ do Trial giờ được xử lý hoàn toàn tự động
@@ -235,35 +404,38 @@ bot.on('text', (ctx) => {
       if (match) {
         const sepayContent = normalize(match[1]);
 
-        // Tìm xem có đơn đăng ký nào khớp không
-        const regIndex = pendingRegistrations.findIndex(r => sepayContent.includes(r.paymentContent));
-        if (regIndex !== -1) {
-          const reg = pendingRegistrations[regIndex];
+        // Tìm TẤT CẢ đơn đăng ký khớp với nội dung CK
+        const matchedRegs = pendingRegistrations.filter(r => sepayContent.includes(r.paymentContent));
+        
+        if (matchedRegs.length > 0) {
+          const firstReg = matchedRegs[0];
 
           // Báo vào group admin
           const successMsg = `✅ **XÁC NHẬN THÀNH CÔNG!**\n` +
             `Nội dung CK và nội dung đăng ký đã khớp với nhau.\n` +
-            `- Người dùng: ${reg.firstName} (@${reg.username || 'không có'})\n` +
-            `- Email: ${reg.email}\n` +
-            `- Serial: ${reg.serial}\n` +
-            `- Ngày đăng ký: ${reg.dateStr}`;
+            `- Người dùng: ${firstReg.firstName} (@${firstReg.username || 'không có'})\n` +
+            `- Email: ${firstReg.email}\n` +
+            `- Số lượng: ${matchedRegs.length} thiết bị\n` +
+            `- Ngày đăng ký: ${firstReg.dateStr}`;
           ctx.reply(successMsg, { parse_mode: 'Markdown', reply_to_message_id: ctx.message.message_id });
 
           // Báo cho người dùng trong private chat
-          bot.telegram.sendMessage(reg.userId, `🎉 **Thanh toán của bạn đã được hệ thống xác nhận!**\nAdmin sẽ kiểm tra và cấp quyền cho thiết bị của bạn sớm nhất có thể.`, { parse_mode: 'Markdown' }).catch(console.error);
+          bot.telegram.sendMessage(firstReg.userId, `🎉 **Thanh toán của bạn đã được hệ thống xác nhận!**\nHệ thống đang kích hoạt ${matchedRegs.length} thiết bị của bạn...`, { parse_mode: 'Markdown' }).catch(console.error);
 
-          // Xóa đơn đã duyệt khỏi danh sách chờ
-          pendingRegistrations.splice(regIndex, 1);
+          // Xóa các đơn đã duyệt khỏi danh sách chờ
+          pendingRegistrations = pendingRegistrations.filter(r => !sepayContent.includes(r.paymentContent));
           savePending();
 
-          // Gọi API tự động thêm Serial vĩnh viễn
-          callApiAddSerial(reg.serial, false).then((success) => {
-            if (success) {
-              bot.telegram.sendMessage(reg.userId, `✅ **Thiết bị của bạn đã được kích hoạt Vĩnh Viễn trên hệ thống!**`, { parse_mode: 'Markdown' }).catch(console.error);
-              ctx.reply(`✅ Đã gọi API kích hoạt VĨNH VIỄN thành công cho serial: ${reg.serial}`, { reply_to_message_id: ctx.message.message_id });
-            } else {
-              ctx.reply(`❌ Lỗi gọi API cho serial: ${reg.serial}. Vui lòng tự thêm tay trên server!`, { reply_to_message_id: ctx.message.message_id });
-            }
+          // Gọi API tự động
+          matchedRegs.forEach(reg => {
+            callApiAddSerial(reg.serial, false).then((success) => {
+              if (success) {
+                bot.telegram.sendMessage(reg.userId, `✅ **Thiết bị (Serial: ${reg.serial}) đã được kích hoạt Vĩnh Viễn trên hệ thống!**`, { parse_mode: 'Markdown' }).catch(console.error);
+                ctx.reply(`✅ Đã gọi API kích hoạt VĨNH VIỄN thành công cho serial: ${reg.serial}`, { reply_to_message_id: ctx.message.message_id });
+              } else {
+                ctx.reply(`❌ Lỗi gọi API cho serial: ${reg.serial}. Vui lòng tự thêm tay trên server!`, { reply_to_message_id: ctx.message.message_id });
+              }
+            });
           });
         } else {
           ctx.reply('❌ Không tìm thấy đơn đăng ký nào khớp với Nội dung CK này trong dữ liệu chờ duyệt.', { reply_to_message_id: ctx.message.message_id });
