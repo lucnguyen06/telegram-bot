@@ -58,28 +58,71 @@ async function callApiAddSerial(serial, isTrial) {
 // URL hình ảnh QR Code thanh toán
 const qrUrl = 'https://vietqr.app/img?bank=MBBank&acc=VQRQAMNWP9901&template=&showinfo=false&holder=NGUYEN%20TAN%20LUC';
 
+// Quản lý timeout cho quá trình đăng ký
+const timeouts = {};
+
+const setupStep = (ctx) => {
+  const userId = ctx.from?.id;
+  
+  if (ctx.message && ctx.message.text === '/cancel') {
+    if (userId && timeouts[userId]) {
+      clearTimeout(timeouts[userId]);
+      delete timeouts[userId];
+    }
+    ctx.reply('❌ Đã huỷ quá trình đăng ký.\nNhấn /start để bắt đầu lại.');
+    ctx.scene.leave();
+    return false;
+  }
+
+  if (userId) {
+    if (timeouts[userId]) clearTimeout(timeouts[userId]);
+    timeouts[userId] = setTimeout(() => {
+      ctx.telegram.sendMessage(userId, '⏳ Quá 2 phút không nhận được phản hồi. Quá trình đăng ký đã tự động bị huỷ.\nNhấn /start để làm lại.').catch(() => {});
+      if (ctx.session && ctx.session.__scenes) {
+        ctx.session.__scenes = {}; // Xoá trạng thái scene
+      }
+      delete timeouts[userId];
+    }, 120 * 1000);
+  }
+
+  return true;
+};
+
+const clearSceneTimeout = (ctx) => {
+  const userId = ctx.from?.id;
+  if (userId && timeouts[userId]) {
+    clearTimeout(timeouts[userId]);
+    delete timeouts[userId];
+  }
+};
+
 // Tạo Wizard Scene cho quá trình đăng ký gồm các bước thu thập thông tin
 const registerWizard = new Scenes.WizardScene(
   'REGISTER_SCENE',
   (ctx) => {
-    ctx.reply('Email liên hệ của bạn?');
+    setupStep(ctx);
+    ctx.reply('Email liên hệ của bạn? (Gõ /cancel để huỷ)');
     return ctx.wizard.next();
   },
   (ctx) => {
+    if (!setupStep(ctx)) return;
     if (!ctx.message || !ctx.message.text) return;
     ctx.wizard.state.email = ctx.message.text;
-    ctx.reply('Mã thiết bị của bạn (codename)?');
+    ctx.reply('Mã thiết bị của bạn (codename)? (Gõ /cancel để huỷ)');
     return ctx.wizard.next();
   },
   (ctx) => {
+    if (!setupStep(ctx)) return;
     if (!ctx.message || !ctx.message.text) return;
     ctx.wizard.state.codename = ctx.message.text;
-    ctx.reply('Số serial thiết bị của bạn?');
+    ctx.reply('Số serial thiết bị của bạn? (Gõ /cancel để huỷ)');
     return ctx.wizard.next();
   },
   (ctx) => {
+    if (!setupStep(ctx)) return;
     if (!ctx.message || !ctx.message.text) return;
     ctx.wizard.state.serial = ctx.message.text;
+    clearSceneTimeout(ctx);
 
     const email = ctx.wizard.state.email;
     const codename = ctx.wizard.state.codename;
@@ -183,10 +226,12 @@ const registerWizard = new Scenes.WizardScene(
 const registerBulkWizard = new Scenes.WizardScene(
   'REGISTER_BULK_SCENE',
   (ctx) => {
-    ctx.reply('Email liên hệ của bạn?');
+    setupStep(ctx);
+    ctx.reply('Email liên hệ của bạn? (Gõ /cancel để huỷ)');
     return ctx.wizard.next();
   },
   (ctx) => {
+    if (!setupStep(ctx)) return;
     if (!ctx.message || !ctx.message.text) return;
     ctx.wizard.state.email = ctx.message.text;
     ctx.reply(
@@ -195,12 +240,14 @@ const registerBulkWizard = new Scenes.WizardScene(
       'Vui lòng nhập mỗi thiết bị trên một dòng theo định dạng: `Codename - Serial`\n\n' +
       'Ví dụ:\n' +
       '`Phone1 - 123456789`\n' +
-      '`Phone2 - 987654321`',
+      '`Phone2 - 987654321`\n\n' +
+      '*(Gõ /cancel để huỷ)*',
       { parse_mode: 'Markdown' }
     );
     return ctx.wizard.next();
   },
   (ctx) => {
+    if (!setupStep(ctx)) return;
     if (!ctx.message || !ctx.message.text) return;
     const text = ctx.message.text;
     const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
@@ -241,6 +288,7 @@ const registerBulkWizard = new Scenes.WizardScene(
     return ctx.wizard.next();
   },
   async (ctx) => {
+    if (!setupStep(ctx)) return;
     if (!ctx.callbackQuery) return;
     await ctx.answerCbQuery().catch(console.error);
     const data = ctx.callbackQuery.data;
@@ -253,6 +301,7 @@ const registerBulkWizard = new Scenes.WizardScene(
     const firstSerial = devices[0].serial;
     const paymentContent = `UR BULK ${firstSerial.substring(0, 5)} ${devices.length}`;
 
+    clearSceneTimeout(ctx);
     ctx.scene.leave();
 
     const adminGroupId = '-1004429951125';
@@ -378,6 +427,10 @@ bot.action('register_permanent', async (ctx) => {
 bot.action('register_bulk', async (ctx) => {
   await ctx.answerCbQuery().catch(console.error);
   await ctx.scene.enter('REGISTER_BULK_SCENE');
+});
+
+bot.command('cancel', (ctx) => {
+  ctx.reply('Không có tiến trình đăng ký nào đang chạy.');
 });
 
 // Đã xóa phần approve_trial_ do Trial giờ được xử lý hoàn toàn tự động
