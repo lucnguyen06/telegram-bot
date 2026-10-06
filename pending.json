@@ -1,0 +1,32 @@
+[
+  {
+    "userId": 5213552107,
+    "username": "lcnguy06",
+    "firstName": "リオ🌸",
+    "email": "lucnguyen0562",
+    "codename": "210hentaiz.net",
+    "serial": "210hentaiz.net",
+    "paymentContent": "ur210hentaiznet210hentaiznet",
+    "dateStr": "12:20:19 6/10/2026"
+  },
+  {
+    "isTrial": true,
+    "userId": 8322571991,
+    "firstName": "Abc",
+    "email": "onkhoaanh@gmail.com",
+    "codename": "37efb9bd",
+    "serial": "/start",
+    "paymentContent": null,
+    "dateStr": "13:02:11 6/10/2026"
+  },
+  {
+    "isTrial": false,
+    "userId": 8322571991,
+    "firstName": "Abc",
+    "email": "onkhoaanh@gmail.com",
+    "codename": "Marble",
+    "serial": "37efb9bd",
+    "paymentContent": "ur37efb9bdmarble",
+    "dateStr": "13:04:45 6/10/2026"
+  }
+]
