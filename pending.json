@@ -82,5 +82,16 @@
     "serial": "/start",
     "paymentContent": "urstartstart",
     "dateStr": "19:11:32 6/10/2026"
+  },
+  {
+    "isTrial": false,
+    "userId": 8532178644,
+    "username": "Spes2026",
+    "firstName": "Pissarro",
+    "email": "/start",
+    "codename": "/start",
+    "serial": "/start",
+    "paymentContent": "urstartstart",
+    "dateStr": "19:22:41 6/10/2026"
   }
 ]
