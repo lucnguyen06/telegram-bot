@@ -17,6 +17,12 @@ const savePending = () => fs.writeFileSync(dbFile, JSON.stringify(pendingRegistr
 // Hàm chuẩn hóa chuỗi để so sánh: chỉ giữ lại chữ/số, viết thường
 const normalize = (str) => str.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
 
+// Hàm escape ký tự đặc biệt của Markdown V1 để tránh lỗi parse entities
+const escapeMd = (str) => {
+  if (!str) return '';
+  return String(str).replace(/([_*`\[\\])/g, '\\$1');
+};
+
 // Hàm gọi API thêm serial
 async function callApiAddSerial(serial, isTrial) {
   const apiUrl = 'https://hypermods.id.vn/check_serial2.php';
@@ -92,10 +98,10 @@ const registerWizard = new Scenes.WizardScene(
     if (isTrial) {
       // 1. Nếu là Trial: Báo admin và Gọi API lập tức (Không lưu pending)
       const notificationToAdmin = `📝 **Có người đăng ký mới (Dùng thử 36 ngày)!**\n` +
-        `- Người dùng: ${ctx.from.first_name} (@${ctx.from.username || 'không có'})\n` +
-        `- Email: ${email}\n` +
-        `- Codename: ${codename}\n` +
-        `- Serial: ${serial}\n` +
+        `- Người dùng: ${escapeMd(ctx.from.first_name)} (@${escapeMd(ctx.from.username) || 'không có'})\n` +
+        `- Email: ${escapeMd(email)}\n` +
+        `- Codename: ${escapeMd(codename)}\n` +
+        `- Serial: ${escapeMd(serial)}\n` +
         `- Ngày đăng ký: ${dateStr}\n\n` +
         `✅ **ĐANG TỰ ĐỘNG KÍCH HOẠT API...**`;
       ctx.telegram.sendMessage(adminGroupId, notificationToAdmin, { parse_mode: 'Markdown' }).catch(err => console.error('Lỗi gửi thông báo admin:', err));
@@ -103,17 +109,17 @@ const registerWizard = new Scenes.WizardScene(
       const trialInfo = `✅ **Đăng ký Serial HyperUR thành công!**\n\n` +
         `📋 **Thông tin của bạn:**\n` +
         `- Gói đăng ký: ${typeText}\n` +
-        `- Email: ${email}\n` +
-        `- Codename: ${codename}\n` +
-        `- Serial: ${serial}\n\n` +
+        `- Email: ${escapeMd(email)}\n` +
+        `- Codename: ${escapeMd(codename)}\n` +
+        `- Serial: ${escapeMd(serial)}\n\n` +
         `⏳ Hệ thống đang kích hoạt trên Server, vui lòng chờ trong giây lát...`;
       ctx.reply(trialInfo, { parse_mode: 'Markdown' });
 
       // Gọi API tự động luôn
       callApiAddSerial(serial, true).then((success) => {
         if (success) {
-          ctx.reply(`🎉 **Hoàn tất!** Thiết bị (Serial: ${serial}) đã được kích hoạt dùng thử 36 ngày thành công trên hệ thống.`, { parse_mode: 'Markdown' });
-          ctx.telegram.sendMessage(adminGroupId, `✅ API Kích hoạt thành công cho Serial: ${serial} (Dùng thử 36 ngày).`);
+          ctx.reply(`🎉 **Hoàn tất!** Thiết bị (Serial: ${escapeMd(serial)}) đã được kích hoạt dùng thử 36 ngày thành công trên hệ thống.`, { parse_mode: 'Markdown' });
+          ctx.telegram.sendMessage(adminGroupId, `✅ API Kích hoạt thành công (Dùng thử 36 ngày).\n- Email: ${email}\n- Codename: ${codename}\n- Serial: ${serial}`);
         } else {
           ctx.reply(`❌ Quá trình gọi API bị lỗi. Vui lòng liên hệ admin để hỗ trợ thêm.`, { parse_mode: 'Markdown' });
           ctx.telegram.sendMessage(adminGroupId, `❌ Lỗi khi tự động gọi API cho Serial: ${serial} (Dùng thử). Vui lòng kiểm tra Server!`);
@@ -136,10 +142,10 @@ const registerWizard = new Scenes.WizardScene(
       savePending();
 
       const notificationToAdmin = `📝 **Có người đăng ký mới (Vĩnh viễn)!**\n` +
-        `- Người dùng: ${ctx.from.first_name} (@${ctx.from.username || 'không có'})\n` +
-        `- Email: ${email}\n` +
-        `- Codename: ${codename}\n` +
-        `- Serial: ${serial}\n` +
+        `- Người dùng: ${escapeMd(ctx.from.first_name)} (@${escapeMd(ctx.from.username) || 'không có'})\n` +
+        `- Email: ${escapeMd(email)}\n` +
+        `- Codename: ${escapeMd(codename)}\n` +
+        `- Serial: ${escapeMd(serial)}\n` +
         `- Ngày đăng ký: ${dateStr}\n` +
         `- Nội dung CK: \`${paymentContent}\``;
       ctx.telegram.sendMessage(adminGroupId, notificationToAdmin, { parse_mode: 'Markdown' }).catch(err => console.error('Lỗi gửi thông báo admin:', err));
@@ -147,9 +153,9 @@ const registerWizard = new Scenes.WizardScene(
       const paymentInfo = `✅ **Đăng ký Serial HyperUR thành công!**\n\n` +
         `📋 **Thông tin của bạn:**\n` +
         `- Gói đăng ký: ${typeText}\n` +
-        `- Email: ${email}\n` +
-        `- Codename: ${codename}\n` +
-        `- Serial: ${serial}\n` +
+        `- Email: ${escapeMd(email)}\n` +
+        `- Codename: ${escapeMd(codename)}\n` +
+        `- Serial: ${escapeMd(serial)}\n` +
         `- Ngày đăng ký: ${dateStr}\n\n` +
         `Để hoàn tất, vui lòng quét mã QR hoặc chuyển khoản theo thông tin bên dưới:\n\n` +
         `🏦 *Ngân hàng:* MBBank\n` +
@@ -256,10 +262,10 @@ const registerBulkWizard = new Scenes.WizardScene(
 
     if (isTrial) {
       const notificationToAdmin = `📝 **Có người đăng ký mới (${typeText})!**\n` +
-        `- Người dùng: ${ctx.from.first_name} (@${ctx.from.username || 'không có'})\n` +
-        `- Email: ${email}\n` +
+        `- Người dùng: ${escapeMd(ctx.from.first_name)} (@${escapeMd(ctx.from.username) || 'không có'})\n` +
+        `- Email: ${escapeMd(email)}\n` +
         `- Số lượng: ${devices.length} thiết bị\n` +
-        `- Danh sách:\n${deviceListStr}\n` +
+        `- Danh sách:\n${escapeMd(deviceListStr)}\n` +
         `- Ngày đăng ký: ${dateStr}\n\n` +
         `✅ **ĐANG TỰ ĐỘNG KÍCH HOẠT API...**`;
       ctx.telegram.sendMessage(adminGroupId, notificationToAdmin, { parse_mode: 'Markdown' }).catch(err => console.error(err));
@@ -267,7 +273,7 @@ const registerBulkWizard = new Scenes.WizardScene(
       const trialInfo = `✅ **Đăng ký Serial HyperUR thành công!**\n\n` +
         `📋 **Thông tin của bạn:**\n` +
         `- Gói đăng ký: ${typeText}\n` +
-        `- Email: ${email}\n` +
+        `- Email: ${escapeMd(email)}\n` +
         `- Số lượng: ${devices.length} thiết bị\n\n` +
         `⏳ Hệ thống đang kích hoạt trên Server, vui lòng chờ trong giây lát...`;
       ctx.reply(trialInfo, { parse_mode: 'Markdown' });
@@ -300,10 +306,10 @@ const registerBulkWizard = new Scenes.WizardScene(
       savePending();
 
       const notificationToAdmin = `📝 **Có người đăng ký mới (${typeText})!**\n` +
-        `- Người dùng: ${ctx.from.first_name} (@${ctx.from.username || 'không có'})\n` +
-        `- Email: ${email}\n` +
+        `- Người dùng: ${escapeMd(ctx.from.first_name)} (@${escapeMd(ctx.from.username) || 'không có'})\n` +
+        `- Email: ${escapeMd(email)}\n` +
         `- Số lượng: ${devices.length} thiết bị\n` +
-        `- Danh sách:\n${deviceListStr}\n` +
+        `- Danh sách:\n${escapeMd(deviceListStr)}\n` +
         `- Ngày đăng ký: ${dateStr}\n` +
         `- Nội dung CK: \`${paymentContent}\``;
       ctx.telegram.sendMessage(adminGroupId, notificationToAdmin, { parse_mode: 'Markdown' }).catch(err => console.error(err));
@@ -311,7 +317,7 @@ const registerBulkWizard = new Scenes.WizardScene(
       const paymentInfo = `✅ **Đăng ký Serial HyperUR thành công!**\n\n` +
         `📋 **Thông tin của bạn:**\n` +
         `- Gói đăng ký: ${typeText}\n` +
-        `- Email: ${email}\n` +
+        `- Email: ${escapeMd(email)}\n` +
         `- Số lượng: ${devices.length} thiết bị\n` +
         `- Ngày đăng ký: ${dateStr}\n\n` +
         `Để hoàn tất, vui lòng quét mã QR hoặc chuyển khoản theo thông tin bên dưới:\n\n` +
@@ -339,7 +345,7 @@ bot.use(stage.middleware());
 
 // Xử lý lệnh /start
 bot.start((ctx) => {
-  const firstName = ctx.from.first_name || 'bạn';
+  const firstName = escapeMd(ctx.from.first_name) || 'bạn';
 
   const welcomeMessage = `Chào mừng ${firstName} đến với bot đăng ký HyperUR rom! 🚀\n\n` +
     `*Lưu ý:*\n` +
@@ -384,7 +390,7 @@ bot.on('photo', (ctx) => {
     ctx.telegram.forwardMessage(adminGroupId, ctx.chat.id, ctx.message.message_id)
       .catch(err => console.error('Lỗi forward bill:', err));
     // Báo kèm thông tin người gửi
-    const userInfo = ctx.from.username ? `@${ctx.from.username}` : ctx.from.first_name;
+    const userInfo = ctx.from.username ? `@${escapeMd(ctx.from.username)}` : escapeMd(ctx.from.first_name);
     ctx.telegram.sendMessage(adminGroupId, `💸 **Bill thanh toán mới** từ người dùng: ${userInfo}`, { parse_mode: 'Markdown' }).catch(console.error);
 
     return ctx.reply('Cảm ơn bạn! Đã nhận được ảnh thanh toán. Admin sẽ kiểm tra và cấp quyền/phản hồi lại trong vòng 5 phút đến 1 tiếng.');
@@ -415,8 +421,8 @@ bot.on('text', (ctx) => {
           // Báo vào group admin
           const successMsg = `✅ **XÁC NHẬN THÀNH CÔNG!**\n` +
             `Nội dung CK và nội dung đăng ký đã khớp với nhau.\n` +
-            `- Người dùng: ${firstReg.firstName} (@${firstReg.username || 'không có'})\n` +
-            `- Email: ${firstReg.email}\n` +
+            `- Người dùng: ${escapeMd(firstReg.firstName)} (@${escapeMd(firstReg.username) || 'không có'})\n` +
+            `- Email: ${escapeMd(firstReg.email)}\n` +
             `- Số lượng: ${matchedRegs.length} thiết bị\n` +
             `- Ngày đăng ký: ${firstReg.dateStr}`;
           ctx.reply(successMsg, { parse_mode: 'Markdown', reply_to_message_id: ctx.message.message_id });
@@ -432,8 +438,8 @@ bot.on('text', (ctx) => {
           matchedRegs.forEach(reg => {
             callApiAddSerial(reg.serial, false).then((success) => {
               if (success) {
-                bot.telegram.sendMessage(reg.userId, `✅ **Thiết bị (Serial: ${reg.serial}) đã được kích hoạt Vĩnh Viễn trên hệ thống!**`, { parse_mode: 'Markdown' }).catch(console.error);
-                ctx.reply(`✅ Đã gọi API kích hoạt VĨNH VIỄN thành công cho serial: ${reg.serial}`, { reply_to_message_id: ctx.message.message_id });
+                bot.telegram.sendMessage(reg.userId, `✅ **Thiết bị (Serial: ${escapeMd(reg.serial)}) đã được kích hoạt Vĩnh Viễn trên hệ thống!**`, { parse_mode: 'Markdown' }).catch(console.error);
+                ctx.reply(`✅ Đã gọi API kích hoạt VĨNH VIỄN thành công (Serial: ${reg.serial}).\n- Email: ${reg.email}\n- Codename: ${reg.codename}`, { reply_to_message_id: ctx.message.message_id });
               } else {
                 ctx.reply(`❌ Lỗi gọi API cho serial: ${reg.serial}. Vui lòng tự thêm tay trên server!`, { reply_to_message_id: ctx.message.message_id });
               }
