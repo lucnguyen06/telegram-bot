@@ -68,16 +68,81 @@ TELEGRAM_BOT_TOKEN=Điền_Token_Của_Bot_Vào_Đây
 
 ## 🚀 Cách chạy Bot
 
-**Chạy trực tiếp (để test hoặc phát triển):**
+### Chạy trên máy local (test/phát triển)
+
+**Bước 1: Cài đặt dependencies**
+```bash
+npm install
+```
+
+**Bước 2: Chạy bot**
 ```bash
 npm start
 ```
 Bot sẽ in ra dòng `Bot is running with Telegraf scenes...` báo hiệu đã khởi chạy thành công.
 
-*(Khuyến nghị: Khi treo trên server thật/VPS, hãy sử dụng **PM2** để giữ cho bot luôn chạy ngầm mà không bị tắt khi đóng cửa sổ terminal).*
+### Chạy trên VPS (Production)
+
+**Cách 1: Sử dụng PM2 (Khuyến nghị)**
+
+PM2 giúp bot chạy nền, tự động khởi động lại khi có lỗi và khi VPS reboot.
+
 ```bash
+# Cài đặt dependencies
+npm install
+
+# Cài đặt PM2 global
 npm install -g pm2
-pm2 start index.js --name "hyperur-bot"
+
+# Khởi chạy bot với PM2
+pm2 start index.js --name telegram-bot
+
+# Các lệnh quản lý PM2
+pm2 list                # Xem danh sách process
+pm2 logs telegram-bot   # Xem logs realtime
+pm2 restart telegram-bot # Restart bot
+pm2 stop telegram-bot   # Dừng bot
+pm2 delete telegram-bot # Xóa khỏi PM2
+
+# Tự động khởi động khi VPS reboot
+pm2 startup
+pm2 save
+```
+
+**Cách 2: Sử dụng nohup**
+
+Chạy bot ở chế độ nền đơn giản:
+```bash
+npm install
+nohup npm start > bot.log 2>&1 &
+
+# Xem logs
+tail -f bot.log
+
+# Tìm process để dừng
+ps aux | grep node
+kill <PID>
+```
+
+**Cách 3: Sử dụng screen**
+
+Cho phép detach/attach terminal:
+```bash
+npm install
+
+# Tạo session mới
+screen -S telegram-bot
+
+# Chạy bot
+npm start
+
+# Nhấn Ctrl+A+D để detach (bot vẫn chạy nền)
+
+# Attach lại để xem
+screen -r telegram-bot
+
+# List tất cả sessions
+screen -ls
 ```
 
 ---
