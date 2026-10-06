@@ -3,6 +3,8 @@ const { Telegraf, Markup, session, Scenes } = require('telegraf');
 
 const token = process.env.TELEGRAM_BOT_TOKEN;
 const bot = new Telegraf(token);
+const express = require('express');
+const app = express();
 
 const fs = require('fs');
 const dbFile = 'pending.json';
@@ -463,3 +465,13 @@ bot.catch((err, ctx) => {
 // Kích hoạt tính năng dừng bot an toàn
 process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
+
+// Tạo dummy web server để Render.com nhận diện dịch vụ chạy thành công
+app.get('/', (req, res) => {
+  res.send('Bot is running!');
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Web server is running on port ${PORT}`);
+});
