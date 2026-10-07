@@ -118,7 +118,7 @@ const registerWizard = new Scenes.WizardScene(
     ctx.reply('Số serial thiết bị của bạn? (Gõ /cancel để huỷ)');
     return ctx.wizard.next();
   },
-  (ctx) => {
+  async (ctx) => {
     if (!setupStep(ctx)) return;
     if (!ctx.message || !ctx.message.text) return;
     ctx.wizard.state.serial = ctx.message.text;
@@ -208,16 +208,29 @@ const registerWizard = new Scenes.WizardScene(
         `⏳ *Hệ thống sẽ tự động đối chiếu khi bạn thanh toán xong, KHÔNG CẦN gửi ảnh bill.* (Trừ khi sau 5-10 phút chưa thấy thông báo thì bạn có thể gửi ảnh bill vào đây để admin kiểm tra thủ công).`;
 
       const dynamicQrUrl = `https://img.vietqr.io/image/MB-VQRQAMNWP9901-qr_only.png?addInfo=${encodeURIComponent(paymentContent)}&accountName=NGUYEN%20TAN%20LUC`;
-      return ctx.replyWithPhoto(
-        { url: dynamicQrUrl },
-        {
-          caption: paymentInfo,
-          parse_mode: 'Markdown'
-        }
-      ).catch(err => {
+      
+      // Pre-download ảnh QR trước khi gửi để tránh timeout
+      try {
+        const response = await fetch(dynamicQrUrl, { timeout: 10000 });
+        if (!response.ok) throw new Error('Failed to fetch QR image');
+        const arrayBuffer = await response.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+        
+        return await ctx.replyWithPhoto(
+          { source: buffer },
+          {
+            caption: paymentInfo,
+            parse_mode: 'Markdown'
+          }
+        );
+      } catch (err) {
         console.error("Error sending photo:", err);
-        return ctx.reply(paymentInfo, { parse_mode: 'Markdown' });
-      });
+        // Fallback: gửi text kèm link QR
+        return ctx.reply(
+          paymentInfo + `\n\n🔗 *Link QR Code:* [Nhấn vào đây để xem QR](${dynamicQrUrl})`,
+          { parse_mode: 'Markdown' }
+        );
+      }
     }
   }
 );
@@ -377,10 +390,29 @@ const registerBulkWizard = new Scenes.WizardScene(
         `⏳ *Hệ thống sẽ tự động đối chiếu khi bạn thanh toán xong, KHÔNG CẦN gửi ảnh bill.* (Trừ khi sau 5-10 phút chưa thấy thông báo thì bạn có thể gửi ảnh bill vào đây để admin kiểm tra thủ công).`;
 
       const dynamicQrUrl = `https://img.vietqr.io/image/MB-VQRQAMNWP9901-qr_only.png?addInfo=${encodeURIComponent(paymentContent)}&accountName=NGUYEN%20TAN%20LUC`;
-      ctx.replyWithPhoto({ url: dynamicQrUrl }, { caption: paymentInfo, parse_mode: 'Markdown' }).catch(err => {
+      
+      // Pre-download ảnh QR trước khi gửi để tránh timeout
+      try {
+        const response = await fetch(dynamicQrUrl, { timeout: 10000 });
+        if (!response.ok) throw new Error('Failed to fetch QR image');
+        const arrayBuffer = await response.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+        
+        await ctx.replyWithPhoto(
+          { source: buffer },
+          {
+            caption: paymentInfo,
+            parse_mode: 'Markdown'
+          }
+        );
+      } catch (err) {
         console.error("Error sending photo:", err);
-        ctx.reply(paymentInfo, { parse_mode: 'Markdown' });
-      });
+        // Fallback: gửi text kèm link QR
+        ctx.reply(
+          paymentInfo + `\n\n🔗 *Link QR Code:* [Nhấn vào đây để xem QR](${dynamicQrUrl})`,
+          { parse_mode: 'Markdown' }
+        );
+      }
     }
   }
 );
