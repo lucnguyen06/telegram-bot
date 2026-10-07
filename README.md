@@ -80,7 +80,7 @@ npm install
 npm start
 ```
 Bot sẽ in ra dòng `Bot is running with Telegraf scenes...` báo hiệu đã khởi chạy thành công.
-
+	
 ### Chạy trên VPS (Production)
 
 **Cách 1: Sử dụng PM2 (Khuyến nghị)**
@@ -96,7 +96,7 @@ npm install -g pm2
 
 # Khởi chạy bot với PM2
 pm2 start index.js --name telegram-bot
-
+\\\\\
 # Các lệnh quản lý PM2
 pm2 list                # Xem danh sách process
 pm2 logs telegram-bot   # Xem logs realtime
